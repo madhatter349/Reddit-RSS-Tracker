@@ -1,8 +1,8 @@
-import feedparser
+import requests
 import sqlite3
 import json
 from datetime import datetime
-import requests
+import xml.etree.ElementTree as ET
 
 # RSS feed URL
 RSS_URL = "https://old.reddit.com/r/midsoledeals/search.xml?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
@@ -29,7 +29,8 @@ def init_db():
         title TEXT,
         link TEXT,
         published TEXT,
-        author TEXT
+        author TEXT,
+        thumbnail TEXT
     )
     ''')
     conn.commit()
@@ -39,24 +40,41 @@ def fetch_and_save_posts():
     user_agent = get_user_agent()
     headers = {"user-agent": user_agent}
     
-    feed = feedparser.parse(RSS_URL, request_headers=headers)
+    response = requests.get(RSS_URL, headers=headers)
+    root = ET.fromstring(response.content)
+    
+    # Define namespaces
+    namespaces = {
+        'atom': 'http://www.w3.org/2005/Atom',
+        'media': 'http://search.yahoo.com/mrss/'
+    }
+    
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
     new_posts = []
-    for entry in feed.entries:
-        cursor.execute('SELECT id FROM posts WHERE id = ?', (entry.id,))
+    for entry in root.findall('atom:entry', namespaces):
+        post_id = entry.find('atom:id', namespaces).text
+        title = entry.find('atom:title', namespaces).text
+        link = entry.find('atom:link', namespaces).attrib['href']
+        published = entry.find('atom:published', namespaces).text
+        author = entry.find('atom:author/atom:name', namespaces).text
+        thumbnail = entry.find('media:thumbnail', namespaces)
+        thumbnail_url = thumbnail.attrib['url'] if thumbnail is not None else None
+        
+        cursor.execute('SELECT id FROM posts WHERE id = ?', (post_id,))
         if cursor.fetchone() is None:
             cursor.execute('''
-            INSERT INTO posts (id, title, link, published, author)
-            VALUES (?, ?, ?, ?, ?)
-            ''', (entry.id, entry.title, entry.link, entry.published, entry.author))
+            INSERT INTO posts (id, title, link, published, author, thumbnail)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ''', (post_id, title, link, published, author, thumbnail_url))
             new_posts.append({
-                'id': entry.id,
-                'title': entry.title,
-                'link': entry.link,
-                'published': entry.published,
-                'author': entry.author
+                'id': post_id,
+                'title': title,
+                'link': link,
+                'published': published,
+                'author': author,
+                'thumbnail': thumbnail_url
             })
     
     conn.commit()
