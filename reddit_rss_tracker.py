@@ -148,22 +148,29 @@ def get_removed_posts():
     
     return removed_posts
 
-def send_email(comparison_results):
+def send_email(new_posts):
     headers = {
         'Content-Type': 'application/x-www-form-urlencoded',
     }
 
     body_content = f"""
-    <h2>New RSS Data from Reddit Tracker</h2>
-    <p>New RSS data has been fetched and processed.</p>
-    <h3>Comparison Results:</h3>
-    <pre><code>{json.dumps(comparison_results, indent=2)}</code></pre>
+    <h2>New Posts from Reddit Tracker</h2>
+    <p>{len(new_posts)} new post(s) have been found.</p>
+    <h3>New Posts:</h3>
+    <ul>
+    """
+    
+    for post in new_posts:
+        body_content += f"<li><a href='{post['link']}'>{post['title']}</a> by {post['author']}</li>"
+    
+    body_content += f"""
+    </ul>
     <p>For full details, check the <a href="{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}">GitHub Actions run</a>.</p>
     """
 
     data = {
         'to': 'madhatter349@gmail.com',
-        'subject': 'New RSS Data from Reddit Tracker',
+        'subject': f'New Posts Alert: {len(new_posts)} new posts found',
         'body': body_content,
         'type': 'text/html'
     }
@@ -200,11 +207,14 @@ def main():
         json.dump(comparison_results, f, indent=2)
     log_debug("Comparison results saved to comparison_result.json")
     
-    email_sent = send_email(comparison_results)
-    if email_sent:
-        log_debug("Email notification sent successfully")
+    if new_posts:
+        email_sent = send_email(new_posts)
+        if email_sent:
+            log_debug("Email notification sent successfully")
+        else:
+            log_debug("Failed to send email notification")
     else:
-        log_debug("Failed to send email notification")
+        log_debug("No new posts found. Email not sent.")
     
     log_debug("Script finished")
 
