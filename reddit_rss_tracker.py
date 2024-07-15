@@ -10,6 +10,10 @@ RSS_URL = "https://old.reddit.com/r/midsoledeals/search.xml?q=flair%3A%22New%20B
 # Database setup
 DB_NAME = 'reddit_posts.db'
 
+def log_debug(message):
+    with open('debug.log', 'a') as f:
+        f.write(f"{datetime.now()}: {message}\n")
+
 def get_user_agent():
     try:
         user_agents = requests.get(
@@ -17,7 +21,7 @@ def get_user_agent():
         ).json()
         return user_agents[-2]
     except Exception as e:
-        print(f"Error fetching user agent: {e}")
+        log_debug(f"Error fetching user agent: {e}")
         return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 def init_db():
@@ -40,8 +44,22 @@ def fetch_and_save_posts():
     user_agent = get_user_agent()
     headers = {"user-agent": user_agent}
     
+    log_debug(f"Fetching RSS feed from {RSS_URL}")
     response = requests.get(RSS_URL, headers=headers)
-    root = ET.fromstring(response.content)
+    
+    log_debug(f"Response status code: {response.status_code}")
+    log_debug(f"Response headers: {response.headers}")
+    log_debug(f"Response content (first 500 characters): {response.content[:500]}")
+    
+    if response.status_code != 200:
+        log_debug(f"Error: Received status code {response.status_code}")
+        return []
+    
+    try:
+        root = ET.fromstring(response.content)
+    except ET.ParseError as e:
+        log_debug(f"XML parsing error: {e}")
+        return []
     
     # Define namespaces
     namespaces = {
@@ -83,20 +101,23 @@ def fetch_and_save_posts():
     return new_posts
 
 def main():
+    log_debug("Script started")
     init_db()
     new_posts = fetch_and_save_posts()
     
     if new_posts:
-        print(f"Found {len(new_posts)} new posts:")
+        log_debug(f"Found {len(new_posts)} new posts:")
         for post in new_posts:
-            print(f"- {post['title']} ({post['link']})")
+            log_debug(f"- {post['title']} ({post['link']})")
         
         # Save new posts to a JSON file
         with open('new_posts.json', 'w') as f:
             json.dump(new_posts, f, indent=2)
-        print("New posts saved to new_posts.json")
+        log_debug("New posts saved to new_posts.json")
     else:
-        print("No new posts found.")
+        log_debug("No new posts found.")
+    
+    log_debug("Script finished")
 
 if __name__ == "__main__":
     main()
