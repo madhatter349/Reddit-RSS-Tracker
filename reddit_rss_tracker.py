@@ -1,7 +1,7 @@
 import requests
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
 
 # RSS feed URL
@@ -28,37 +28,37 @@ def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
-    # Create table if it doesn't exist
+    # Create posts table if it doesn't exist
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS posts (
         id TEXT PRIMARY KEY,
         title TEXT,
         link TEXT,
         published TEXT,
-        author TEXT
+        author TEXT,
+        thumbnail TEXT,
+        first_seen TEXT,
+        last_seen TEXT
     )
     ''')
     
-    # Check if thumbnail column exists, add it if it doesn't
-    cursor.execute("PRAGMA table_info(posts)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if 'thumbnail' not in columns:
-        cursor.execute('ALTER TABLE posts ADD COLUMN thumbnail TEXT')
-        log_debug("Added thumbnail column to posts table")
+    # Create runs table to keep track of each script run
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        run_time TEXT
+    )
+    ''')
     
     conn.commit()
     conn.close()
 
-def fetch_and_save_posts():
+def fetch_posts():
     user_agent = get_user_agent()
     headers = {"user-agent": user_agent}
     
     log_debug(f"Fetching RSS feed from {RSS_URL}")
     response = requests.get(RSS_URL, headers=headers)
-    
-    log_debug(f"Response status code: {response.status_code}")
-    log_debug(f"Response headers: {response.headers}")
-    log_debug(f"Response content (first 500 characters): {response.content[:500]}")
     
     if response.status_code != 200:
         log_debug(f"Error: Received status code {response.status_code}")
@@ -70,61 +70,110 @@ def fetch_and_save_posts():
         log_debug(f"XML parsing error: {e}")
         return []
     
-    # Define namespaces
     namespaces = {
         'atom': 'http://www.w3.org/2005/Atom',
         'media': 'http://search.yahoo.com/mrss/'
     }
     
+    posts = []
+    for entry in root.findall('atom:entry', namespaces):
+        post = {
+            'id': entry.find('atom:id', namespaces).text,
+            'title': entry.find('atom:title', namespaces).text,
+            'link': entry.find('atom:link', namespaces).attrib['href'],
+            'published': entry.find('atom:published', namespaces).text,
+            'author': entry.find('atom:author/atom:name', namespaces).text,
+            'thumbnail': entry.find('media:thumbnail', namespaces).attrib['url'] if entry.find('media:thumbnail', namespaces) is not None else None
+        }
+        posts.append(post)
+    
+    return posts
+
+def update_database(posts):
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
+    current_time = datetime.now().isoformat()
+    
     new_posts = []
-    for entry in root.findall('atom:entry', namespaces):
-        post_id = entry.find('atom:id', namespaces).text
-        title = entry.find('atom:title', namespaces).text
-        link = entry.find('atom:link', namespaces).attrib['href']
-        published = entry.find('atom:published', namespaces).text
-        author = entry.find('atom:author/atom:name', namespaces).text
-        thumbnail = entry.find('media:thumbnail', namespaces)
-        thumbnail_url = thumbnail.attrib['url'] if thumbnail is not None else None
+    updated_posts = []
+    
+    for post in posts:
+        cursor.execute('SELECT id, last_seen FROM posts WHERE id = ?', (post['id'],))
+        result = cursor.fetchone()
         
-        cursor.execute('SELECT id FROM posts WHERE id = ?', (post_id,))
-        if cursor.fetchone() is None:
+        if result is None:
+            # New post
             cursor.execute('''
-            INSERT INTO posts (id, title, link, published, author, thumbnail)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ''', (post_id, title, link, published, author, thumbnail_url))
-            new_posts.append({
-                'id': post_id,
-                'title': title,
-                'link': link,
-                'published': published,
-                'author': author,
-                'thumbnail': thumbnail_url
-            })
+            INSERT INTO posts (id, title, link, published, author, thumbnail, first_seen, last_seen)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (post['id'], post['title'], post['link'], post['published'], post['author'], post['thumbnail'], current_time, current_time))
+            new_posts.append(post)
+        else:
+            # Existing post, update last_seen
+            cursor.execute('UPDATE posts SET last_seen = ? WHERE id = ?', (current_time, post['id']))
+            updated_posts.append(post)
+    
+    # Insert new run record
+    cursor.execute('INSERT INTO runs (run_time) VALUES (?)', (current_time,))
     
     conn.commit()
     conn.close()
     
-    return new_posts
+    return new_posts, updated_posts
+
+def get_removed_posts():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    
+    # Get the time of the previous run
+    cursor.execute('SELECT run_time FROM runs ORDER BY id DESC LIMIT 1 OFFSET 1')
+    result = cursor.fetchone()
+    if result is None:
+        return []  # No previous run, so no removed posts
+    
+    previous_run_time = result[0]
+    
+    # Find posts that were seen in the previous run but not in the current run
+    cursor.execute('''
+    SELECT id, title, link, published, author, thumbnail
+    FROM posts
+    WHERE last_seen = ? AND last_seen < (SELECT MAX(run_time) FROM runs)
+    ''', (previous_run_time,))
+    
+    removed_posts = [dict(zip(['id', 'title', 'link', 'published', 'author', 'thumbnail'], row)) for row in cursor.fetchall()]
+    
+    conn.close()
+    
+    return removed_posts
 
 def main():
     log_debug("Script started")
     init_db()
-    new_posts = fetch_and_save_posts()
     
-    if new_posts:
-        log_debug(f"Found {len(new_posts)} new posts:")
-        for post in new_posts:
-            log_debug(f"- {post['title']} ({post['link']})")
-        
-        # Save new posts to a JSON file
-        with open('new_posts.json', 'w') as f:
-            json.dump(new_posts, f, indent=2)
-        log_debug("New posts saved to new_posts.json")
-    else:
-        log_debug("No new posts found.")
+    current_posts = fetch_posts()
+    new_posts, updated_posts = update_database(current_posts)
+    removed_posts = get_removed_posts()
+    
+    log_debug(f"Found {len(new_posts)} new posts:")
+    for post in new_posts:
+        log_debug(f"- {post['title']} ({post['link']})")
+    
+    log_debug(f"Updated {len(updated_posts)} existing posts")
+    
+    log_debug(f"Removed {len(removed_posts)} posts:")
+    for post in removed_posts:
+        log_debug(f"- {post['title']} ({post['link']})")
+    
+    comparison = {
+        'new_posts': new_posts,
+        'updated_posts': updated_posts,
+        'removed_posts': removed_posts
+    }
+    
+    with open('comparison_result.json', 'w') as f:
+        json.dump(comparison, f, indent=2)
+    log_debug("Comparison results saved to comparison_result.json")
     
     log_debug("Script finished")
 
