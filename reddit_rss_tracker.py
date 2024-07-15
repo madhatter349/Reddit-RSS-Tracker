@@ -3,6 +3,7 @@ import sqlite3
 import json
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET
+import os
 
 # RSS feed URL
 RSS_URL = "https://old.reddit.com/r/midsoledeals/search.rss?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
@@ -36,17 +37,11 @@ def init_db():
         link TEXT,
         published TEXT,
         author TEXT,
-        thumbnail TEXT
+        thumbnail TEXT,
+        first_seen TEXT,
+        last_seen TEXT
     )
     ''')
-    
-    # Check if new columns exist, add them if they don't
-    cursor.execute("PRAGMA table_info(posts)")
-    columns = [column[1] for column in cursor.fetchall()]
-    if 'first_seen' not in columns:
-        cursor.execute('ALTER TABLE posts ADD COLUMN first_seen TEXT')
-    if 'last_seen' not in columns:
-        cursor.execute('ALTER TABLE posts ADD COLUMN last_seen TEXT')
     
     # Create runs table to keep track of each script run
     cursor.execute('''
@@ -153,6 +148,36 @@ def get_removed_posts():
     
     return removed_posts
 
+def send_email(comparison_results):
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+    }
+
+    body_content = f"""
+    <h2>New RSS Data from Reddit Tracker</h2>
+    <p>New RSS data has been fetched and processed.</p>
+    <h3>Comparison Results:</h3>
+    <pre><code>{json.dumps(comparison_results, indent=2)}</code></pre>
+    <p>For full details, check the <a href="{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}">GitHub Actions run</a>.</p>
+    """
+
+    data = {
+        'to': 'madhatter349@gmail.com',
+        'subject': 'New RSS Data from Reddit Tracker',
+        'body': body_content,
+        'type': 'text/html'
+    }
+
+    response = requests.post('https://www.cinotify.cc/api/notify', headers=headers, data=data)
+
+    log_debug(f"Email sending status code: {response.status_code}")
+    log_debug(f"Email sending response: {response.text}")
+
+    if response.status_code != 200:
+        log_debug(f"Failed to send email. Status code: {response.status_code}")
+        return False
+    return True
+
 def main():
     log_debug("Script started")
     init_db()
@@ -161,28 +186,27 @@ def main():
     new_posts, updated_posts = update_database(current_posts)
     removed_posts = get_removed_posts()
     
-    log_debug(f"Found {len(new_posts)} new posts:")
-    for post in new_posts:
-        log_debug(f"- {post['title']} ({post['link']})")
-    
-    log_debug(f"Updated {len(updated_posts)} existing posts")
-    
-    log_debug(f"Removed {len(removed_posts)} posts:")
-    for post in removed_posts:
-        log_debug(f"- {post['title']} ({post['link']})")
-    
-    comparison = {
+    comparison_results = {
         'new_posts': new_posts,
         'updated_posts': updated_posts,
         'removed_posts': removed_posts
     }
     
+    log_debug(f"Found {len(new_posts)} new posts")
+    log_debug(f"Updated {len(updated_posts)} existing posts")
+    log_debug(f"Removed {len(removed_posts)} posts")
+    
     with open('comparison_result.json', 'w') as f:
-        json.dump(comparison, f, indent=2)
+        json.dump(comparison_results, f, indent=2)
     log_debug("Comparison results saved to comparison_result.json")
+    
+    email_sent = send_email(comparison_results)
+    if email_sent:
+        log_debug("Email notification sent successfully")
+    else:
+        log_debug("Failed to send email notification")
     
     log_debug("Script finished")
 
 if __name__ == "__main__":
     main()
-    
