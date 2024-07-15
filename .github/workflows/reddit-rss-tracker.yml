@@ -22,6 +22,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install requests
 
       - name: Run RSS tracker
         run: python reddit_rss_tracker.py
@@ -44,31 +45,45 @@ jobs:
           name: comparison-result
           path: comparison_result.json
 
-      - name: Read comparison result
-        id: read_result
-        if: success()
-        run: |
-          content=$(cat comparison_result.json)
-          content="${content//'%'/'%25'}"
-          content="${content//$'\n'/'%0A'}"
-          content="${content//$'\r'/'%0D'}"
-          echo "result=$content" >> $GITHUB_OUTPUT
-
       - name: Send email notification
-        uses: cinotify/github-action@v1.6.0
         if: success()
-        with:
-          to: 'madhatter349@gmail.com'
-          subject: 'New RSS Data from Reddit Tracker'
-          body: |
-            New RSS data has been fetched and processed.
-            
-            Comparison Results:
-            ```json
-            ${{ steps.read_result.outputs.result }}
-            ```
-            
-            For full details, check the GitHub Actions run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          COMPARISON_RESULT: ${{ steps.read_result.outputs.result }}
+        run: |
+          python - <<EOF
+          import requests
+          import json
+          import os
+
+          headers = {
+              'Content-Type': 'application/x-www-form-urlencoded',
+          }
+
+          comparison_result = os.environ.get('COMPARISON_RESULT', '{}')
+          
+          body_content = f"""
+          <h2>New RSS Data from Reddit Tracker</h2>
+          <p>New RSS data has been fetched and processed.</p>
+          <h3>Comparison Results:</h3>
+          <pre><code>{json.dumps(json.loads(comparison_result), indent=2)}</code></pre>
+          <p>For full details, check the <a href="{os.environ.get('GITHUB_SERVER_URL')}/{os.environ.get('GITHUB_REPOSITORY')}/actions/runs/{os.environ.get('GITHUB_RUN_ID')}">GitHub Actions run</a>.</p>
+          """
+
+          data = {
+              'to': 'madhatter349@gmail.com',
+              'subject': 'New RSS Data from Reddit Tracker',
+              'body': body_content,
+              'type': 'text/html'
+          }
+
+          response = requests.post('https://www.cinotify.cc/api/notify', headers=headers, data=data)
+
+          print(f"Status Code: {response.status_code}")
+          print(f"Response: {response.text}")
+          
+          if response.status_code != 200:
+              raise Exception(f"Failed to send email. Status code: {response.status_code}")
+          EOF
 
       - name: Commit and push if there are changes
         run: |
