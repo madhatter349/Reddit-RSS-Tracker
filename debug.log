@@ -63,3 +63,10 @@
 2024-07-15 20:33:32.396156: Removed 0 posts:
 2024-07-15 20:33:32.396494: Comparison results saved to comparison_result.json
 2024-07-15 20:33:32.396524: Script finished
+2024-07-15 20:34:40.613227: Script started
+2024-07-15 20:34:40.694479: Fetching RSS feed from https://old.reddit.com/r/midsoledeals/search.rss?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new
+2024-07-15 20:34:40.978409: Found 0 new posts:
+2024-07-15 20:34:40.978471: Updated 25 existing posts
+2024-07-15 20:34:40.978515: Removed 0 posts:
+2024-07-15 20:34:40.979150: Comparison results saved to comparison_result.json
+2024-07-15 20:34:40.979209: Script finished
