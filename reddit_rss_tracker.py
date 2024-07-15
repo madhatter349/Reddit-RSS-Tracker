@@ -4,8 +4,8 @@ import json
 from datetime import datetime
 import xml.etree.ElementTree as ET
 
-# RSS feed URL
-RSS_URL = "https://old.reddit.com/r/midsoledeals/search.xml?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
+# Updated RSS feed URL
+RSS_URL = "https://old.reddit.com/r/midsoledeals/search.rss?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
 
 # Database setup
 DB_NAME = 'reddit_posts.db'
