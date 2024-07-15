@@ -4,7 +4,7 @@ on:
   push:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '14,27,43,56 * * * *'
 
 jobs:
   track-rss:
@@ -19,15 +19,49 @@ jobs:
           python-version: 3.8
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
       - name: Run RSS tracker
         run: python reddit_rss_tracker.py
+
+      - name: Display debug log
+        run: cat debug.log
+        if: always()
+
+      - name: Upload debug log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: debug-log
+          path: debug.log
+
+      - name: Upload comparison result
+        uses: actions/upload-artifact@v3
+        if: success()
+        with:
+          name: comparison-result
+          path: comparison_result.json
+
+      - name: Send email notification
+        uses: cinotify/github-action@v1.6.0
+        if: success()
+        with:
+          to: 'madhatter349@gmail.com'
+          subject: 'New RSS Data from Reddit Tracker'
+          body: |
+            New RSS data has been fetched and processed.
+            
+            Please find the comparison results attached.
+            
+            For full details, check the GitHub Actions run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          attach: comparison_result.json
 
       - name: Commit and push if there are changes
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git add .
-          git commit -m "Update RSS feed data" || exit 0
+          git add reddit_posts.db
+          git commit -m "Update RSS feed data" || echo "No changes to commit"
           git push
