@@ -2,13 +2,23 @@ import feedparser
 import sqlite3
 import json
 from datetime import datetime
-import os
+import requests
 
 # RSS feed URL
 RSS_URL = "https://old.reddit.com/r/midsoledeals/search.xml?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
 
 # Database setup
 DB_NAME = 'reddit_posts.db'
+
+def get_user_agent():
+    try:
+        user_agents = requests.get(
+            "https://techfanetechnologies.github.io/latest-user-agent/user_agents.json"
+        ).json()
+        return user_agents[-2]
+    except Exception as e:
+        print(f"Error fetching user agent: {e}")
+        return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
 def init_db():
     conn = sqlite3.connect(DB_NAME)
@@ -26,7 +36,10 @@ def init_db():
     conn.close()
 
 def fetch_and_save_posts():
-    feed = feedparser.parse(RSS_URL)
+    user_agent = get_user_agent()
+    headers = {"user-agent": user_agent}
+    
+    feed = feedparser.parse(RSS_URL, request_headers=headers)
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
     
