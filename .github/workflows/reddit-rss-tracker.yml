@@ -44,6 +44,16 @@ jobs:
           name: comparison-result
           path: comparison_result.json
 
+      - name: Read comparison result
+        id: read_result
+        if: success()
+        run: |
+          content=$(cat comparison_result.json)
+          content="${content//'%'/'%25'}"
+          content="${content//$'\n'/'%0A'}"
+          content="${content//$'\r'/'%0D'}"
+          echo "result=$content" >> $GITHUB_OUTPUT
+
       - name: Send email notification
         uses: cinotify/github-action@v1.6.0
         if: success()
@@ -53,10 +63,12 @@ jobs:
           body: |
             New RSS data has been fetched and processed.
             
-            Please find the comparison results attached.
+            Comparison Results:
+            ```json
+            ${{ steps.read_result.outputs.result }}
+            ```
             
             For full details, check the GitHub Actions run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          attach: comparison_result.json
 
       - name: Commit and push if there are changes
         run: |
