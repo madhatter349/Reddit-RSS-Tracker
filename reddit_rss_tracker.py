@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 import xml.etree.ElementTree as ET
 
-# Updated RSS feed URL
+# RSS feed URL
 RSS_URL = "https://old.reddit.com/r/midsoledeals/search.rss?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new"
 
 # Database setup
@@ -27,16 +27,25 @@ def get_user_agent():
 def init_db():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
+    
+    # Create table if it doesn't exist
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS posts (
         id TEXT PRIMARY KEY,
         title TEXT,
         link TEXT,
         published TEXT,
-        author TEXT,
-        thumbnail TEXT
+        author TEXT
     )
     ''')
+    
+    # Check if thumbnail column exists, add it if it doesn't
+    cursor.execute("PRAGMA table_info(posts)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'thumbnail' not in columns:
+        cursor.execute('ALTER TABLE posts ADD COLUMN thumbnail TEXT')
+        log_debug("Added thumbnail column to posts table")
+    
     conn.commit()
     conn.close()
 
