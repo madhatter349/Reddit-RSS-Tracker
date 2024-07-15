@@ -56,3 +56,10 @@
 2024-07-15 20:17:32.473459: - New Balance Made in USA 996 Marblehead/Indigo ON SALE FOR $99.99 (Reg. $189.99) (https://old.reddit.com/r/midsoledeals/comments/1e0oew7/new_balance_made_in_usa_996_marbleheadindigo_on/)
 2024-07-15 20:17:32.473756: New posts saved to new_posts.json
 2024-07-15 20:17:32.473784: Script finished
+2024-07-15 20:33:31.999441: Script started
+2024-07-15 20:33:32.060303: Fetching RSS feed from https://old.reddit.com/r/midsoledeals/search.rss?q=flair%3A%22New%20Balance%22%20OR%20flair%3A%22Adidas%22&restrict_sr=1&sort=new
+2024-07-15 20:33:32.396083: Found 0 new posts:
+2024-07-15 20:33:32.396128: Updated 25 existing posts
+2024-07-15 20:33:32.396156: Removed 0 posts:
+2024-07-15 20:33:32.396494: Comparison results saved to comparison_result.json
+2024-07-15 20:33:32.396524: Script finished
