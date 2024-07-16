@@ -153,37 +153,36 @@ def send_email(new_posts):
         'Content-Type': 'application/x-www-form-urlencoded',
     }
 
-    body_content = f"""
-    <h2>New Posts from Reddit Tracker</h2>
-    <p>{len(new_posts)} new post(s) have been found.</p>
-    <h3>New Posts:</h3>
-    <ul>
-    """
-    
     for post in new_posts:
-        body_content += f"<li><a href='{post['link']}'>{post['title']}</a> by {post['author']}</li>"
-    
-    body_content += f"""
-    </ul>
-    <p>For full details, check the <a href="{os.environ.get('GITHUB_SERVER_URL', '')}/{os.environ.get('GITHUB_REPOSITORY', '')}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}">GitHub Actions run</a>.</p>
-    """
+        body_content = f"""
+        <h2>New Post from Reddit Tracker</h2>
+        <p>A new post has been found:</p>
+        <ul>
+            <li><a href='{post['link']}'>{post['title']}</a> by {post['author']}</li>
+        </ul>
+        """
 
-    data = {
-        'to': 'madhatter349@gmail.com',
-        'subject': f'New Posts Alert: {len(new_posts)} new posts found',
-        'body': body_content,
-        'type': 'text/html'
-    }
+        # Truncate the title if it's too long for the subject
+        subject_title = post['title'] if len(post['title']) <= 100 else post['title'][:97] + '...'
+        
+        data = {
+            'to': 'madhatter349@gmail.com',
+            'subject': f"New Post: {subject_title}",
+            'body': body_content,
+            'type': 'text/html'
+        }
 
-    response = requests.post('https://www.cinotify.cc/api/notify', headers=headers, data=data)
+        response = requests.post('https://www.cinotify.cc/api/notify', headers=headers, data=data)
 
-    log_debug(f"Email sending status code: {response.status_code}")
-    log_debug(f"Email sending response: {response.text}")
+        log_debug(f"Email sending status code: {response.status_code}")
+        log_debug(f"Email sending response: {response.text}")
 
-    if response.status_code != 200:
-        log_debug(f"Failed to send email. Status code: {response.status_code}")
-        return False
-    return True
+        if response.status_code != 200:
+            log_debug(f"Failed to send email for post: {post['title']}. Status code: {response.status_code}")
+        else:
+            log_debug(f"Email sent successfully for post: {post['title']}")
+
+    return True  # Return True if the process completes, even if some emails fail
 
 def main():
     log_debug("Script started")
@@ -208,13 +207,10 @@ def main():
     log_debug("Comparison results saved to comparison_result.json")
     
     if new_posts:
-        email_sent = send_email(new_posts)
-        if email_sent:
-            log_debug("Email notification sent successfully")
-        else:
-            log_debug("Failed to send email notification")
+        send_email(new_posts)
+        log_debug(f"Attempted to send {len(new_posts)} email(s) for new posts")
     else:
-        log_debug("No new posts found. Email not sent.")
+        log_debug("No new posts found. No emails sent.")
     
     log_debug("Script finished")
 
